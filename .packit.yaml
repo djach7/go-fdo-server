@@ -1,0 +1,102 @@
+---
+# https://packit.dev/docs/configuration/
+
+specfile_path: build/package/rpm/go-fdo-server.spec
+
+files_to_sync:
+  - src:
+      - ".packit.yaml"
+      - "build/package/rpm/go-fdo-server.spec"
+      - "go-vendor-tools.toml"
+    dest: .
+
+upstream_package_name: go-fdo-server
+downstream_package_name: go-fdo-server
+
+upstream_tag_template: v{version}
+copy_upstream_release_description: true
+
+srpm_build_deps:
+  - golang
+  - git
+
+packages:
+  go-fdo-server-fedora:
+    downstream_package_name: go-fdo-server
+    upstream_package_name: go-fdo-server
+  go-fdo-server-centos:
+    downstream_package_name: go-fdo-server
+    upstream_package_name: go-fdo-server
+    pkg_tool: centpkg
+
+actions:
+  # for the propose-downstream CLI command
+  pre-sync:
+    - bash -c "make vendor-tarball VERSION=${PACKIT_PROJECT_VERSION}"
+  # for the srpm and copr builds
+  create-archive:
+    - bash -c "make packit-create-archive VERSION=${PACKIT_PROJECT_VERSION}"
+
+jobs:
+
+  # Fedora jobs
+
+  - &fdo_copr_build_fedora
+    job: copr_build
+    packages: [go-fdo-server-fedora]
+    trigger: pull_request
+    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+
+  - <<: *fdo_copr_build_fedora
+    trigger: commit
+    branch: main
+    owner: "@fedora-iot"
+    project: fedora-iot
+
+  - job: tests
+    trigger: pull_request
+    identifier: onboarding-fedora
+    fmf_path: test/fmf
+    tmt_plan: plans/onboarding
+    packages: [go-fdo-server-fedora]
+    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+
+  - job: sync_from_downstream
+    trigger: commit
+
+  - job: propose_downstream
+    trigger: release
+    packages: [go-fdo-server-fedora]
+    dist_git_branches: ["fedora-development", "fedora-latest-stable"]
+
+  - job: koji_build
+    trigger: commit
+    allowed_pr_authors: [all_committers]
+    dist_git_branches: ["fedora-development", "fedora-latest-stable"]
+
+  - job: bodhi_update
+    trigger: commit
+    allowed_builders: [all_committers]
+    dist_git_branches: ["fedora-development", "fedora-latest-stable"]
+
+  # CentOS jobs
+
+  - &fdo_copr_build_centos
+    job: copr_build
+    packages: [go-fdo-server-centos]
+    trigger: pull_request
+    targets: ["centos-stream-9", "centos-stream-10"]
+
+  - <<: *fdo_copr_build_centos
+    trigger: commit
+    branch: main
+    owner: "@fedora-iot"
+    project: fedora-iot
+
+  - job: tests
+    trigger: pull_request
+    identifier: onboarding-centos
+    fmf_path: test/fmf
+    tmt_plan: plans/onboarding
+    packages: [go-fdo-server-centos]
+    targets: ["centos-stream-9", "centos-stream-10"]
