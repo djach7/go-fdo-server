@@ -1,0 +1,88 @@
+---
+# https://packit.dev/docs/configuration/
+
+specfile_path: build/package/rpm/go-fdo-server.spec
+
+files_to_sync:
+  - src:
+      - ".packit.yaml"
+      - "go-vendor-tools.toml"
+    dest: .
+
+upstream_package_name: go-fdo-server
+downstream_package_name: go-fdo-server
+
+upstream_tag_template: v{version}
+copy_upstream_release_description: true
+
+srpm_build_deps:
+  - golang
+  - git
+
+packages:
+  go-fdo-server-fedora:
+    downstream_package_name: go-fdo-server
+    upstream_package_name: go-fdo-server
+  go-fdo-server-centos:
+    downstream_package_name: go-fdo-server
+    upstream_package_name: go-fdo-server
+    pkg_tool: centpkg
+
+actions:
+  # for the propose-downstream CLI command
+  pre-sync:
+    - bash -c "if command -v go_vendor_archive >/dev/null 2>&1; then make vendor-tarball VERSION=${PACKIT_PROJECT_VERSION}; else go mod vendor && tar -czf go-fdo-server-${PACKIT_PROJECT_VERSION}-vendor.tar.gz vendor/ && rm -rf vendor; fi"
+  # for the srpm and copr builds
+  create-archive:
+    - bash -c "make source-tarball VERSION=${PACKIT_PROJECT_VERSION}"
+    - bash -c "if command -v go_vendor_archive >/dev/null 2>&1; then make vendor-tarball VERSION=${PACKIT_PROJECT_VERSION}; else go mod vendor && tar -czf go-fdo-server-${PACKIT_PROJECT_VERSION}-vendor.tar.gz vendor/ && rm -rf vendor; fi"
+
+jobs:
+
+  # Fedora jobs
+
+  - &fdo_copr_build_fedora
+    job: copr_build
+    packages: [go-fdo-server-fedora]
+    trigger: pull_request
+    targets: ["fedora-development", "fedora-stable"]
+
+  - <<: *fdo_copr_build_fedora
+    trigger: commit
+    branch: main
+    owner: "@fedora-iot"
+    project: fedora-iot
+
+
+  - job: sync_from_downstream
+    trigger: commit
+
+  - job: propose_downstream
+    trigger: release
+    packages: [go-fdo-server-fedora]
+    dist_git_branches: ["fedora-development", "fedora-stable"]
+
+  - job: koji_build
+    trigger: commit
+    allowed_pr_authors: [all_committers]
+    dist_git_branches: ["fedora-development", "fedora-stable"]
+
+  - job: bodhi_update
+    trigger: commit
+    allowed_builders: [all_committers]
+    dist_git_branches: ["fedora-development", "fedora-stable"]
+
+  # CentOS jobs
+
+  - &fdo_copr_build_centos
+    job: copr_build
+    packages: [go-fdo-server-centos]
+    trigger: pull_request
+    targets: ["centos-stream-9", "centos-stream-10"]
+
+  - <<: *fdo_copr_build_centos
+    trigger: commit
+    branch: main
+    owner: "@fedora-iot"
+    project: fedora-iot
+
